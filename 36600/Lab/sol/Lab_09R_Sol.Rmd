@@ -1,0 +1,171 @@
+---
+title: "Lab_09R"
+author: "36-600"
+date: "Fall 2022"
+output: 
+  html_document:
+    toc: no
+    toc_float: no
+    theme: spacelab
+---
+
+To answer the questions below, it will help you to refer to the class notes and to Sections 8.1 and 8.3.1-8.3.2 of ISLR 1ed. *Note, however, that we use the rpart package to create trees, which ISLR does not use.* So ISLR is best used for looking up background details.
+
+# Regression Trees
+
+## Data, Part I
+
+We'll begin by importing the heart-disease dataset and log-transforming the response variable, `Cost`:
+```{r}
+df <- read.csv("http://www.stat.cmu.edu/~pfreeman/heart_disease.csv",stringsAsFactors=TRUE)
+df <- df[,-10]
+w <- which(df$Cost > 0)
+df <- df[w,]
+df$Cost <- log(df$Cost)
+summary(df)
+```
+
+## Question 1
+
+Split the data into training and test sets. Call these `df.train` and `df.test`. You can copy whatever code you used to perform splitting in Lab 06R, Question 1. You should reuse the random number seed: this will allow you to compare your MSE for the decision tree model to your MSE for your linear model (Lab 06R, Question 5).
+```{r}
+set.seed(505)
+s <- sample(nrow(df),round(0.7*nrow(df)))
+df.train <- df[s,]
+df.test <- df[-s,]
+```
+
+## Question 2
+
+Learn a regression tree model and report the test-set MSE. How does this MSE compare with what you observed for the linear model? Is it lower? If so, then the (inherently more flexible) nonlinear regression tree model is adapting better to the geometry of the data than the (inherently less flexible) linear model...with the tradeoff that inferential ability is reduced. (But not eliminated, as we'll see.)
+```{r}
+library(rpart)
+rpart.out <- rpart(Cost~.,data=df.train)
+resp.pred <- predict(rpart.out,newdata=df.test)
+(rpart.mse <- mean((resp.pred-df.test$Cost)^2))
+```
+```
+For the linear model, I got 1.632 for the MSE.
+For the regression tree model, I got 1.229. The tree model is definitely better.
+```
+
+## Question 3
+
+Visualize the tree. Install the package `rpart.plot` and run its namesake function while inputting the results of your tree fit. If you were of a mind to do inference, you'd look to see what variables lie at the top of the tree: these are presumably the ones with the most statistical information. (Note that because this is a regression tree, the `extra` argument to `rpart.plot()` won't necessarily be useful here.)
+```{r}
+library(rpart.plot)
+rpart.plot(rpart.out)
+```
+
+## Question 4
+
+Create a diagnostic plot, specifically, the test-set predicted responses ($y$-axis) versus the test-set observed responses ($x$-axis). The predictions were generated in Question 2. For enhanced readability, be sure to set the $x$ limits and the $y$ limits to be the same, and add a line of slope one to the plot. Does the plot seem strange to you? Remember that for a decision tree, this "strangeness" is a feature, not a bug. If you don't know what causes it, call us over.
+```{r}
+suppressMessages(library(tidyverse))
+ggplot(data=data.frame("x"=df.test$Cost,"y"=resp.pred),mapping=aes(x=x,y=y)) + 
+  geom_point() +
+  geom_abline(slope=1,intercept=0,color="red") + 
+  xlim(0,12) + ylim(0,12)
+```
+
+## Question 5
+
+Run `plotcp()` with the output of your call to `rplot()` to see if the tree needs pruned. (Yes, it should be "needs to be pruned," but you're in Pittsburgh.) As a reminder, you are looking for the leftmost point that lies below the dotted line. If this is not the last point (the point farthest to the right), then `plotcp()` is trying to tell you to prune the tree. Note that depending on how you split the data, you may or may not see evidence that pruning is necessary.
+
+Note that even if pruning is deemed necessary, you do not need to do that pruning here. You would, if necessary, go back to the code given in today's notes to extract the pruned tree, which you can then use to, e.g., compute an MSE.
+```{r}
+plotcp(rpart.out)
+```
+
+---
+
+# Classification Trees
+
+Now we turn our attention to classification trees.
+
+## Data, Part II
+
+We will now load in the data on political movements that you looked at in the logistic regression lab:
+```{r}
+file.path <- "http://www.stat.cmu.edu/~pfreeman/movement.Rdata"
+load(url(file.path))
+f <- function(variable,level0="NO",level1="YES") {
+  n <- length(variable)
+  new.variable <- rep(level0,n)
+  w <- which(variable==1)
+  new.variable[w] <- level1
+  return(factor(new.variable))
+}
+predictors$nonviol <- f(predictors$nonviol)
+predictors$sanctions <- f(predictors$sanctions)
+predictors$aid <- f(predictors$aid)
+predictors$support <- f(predictors$support)
+predictors$viol.repress <- f(predictors$viol.repress)
+predictors$defect <- f(predictors$defect)
+levels(response) <- c("FAILURE","SUCCESS")
+rm(file.path,id.half,id,predictors.half)
+summary(predictors)
+summary(response)
+```
+
+## Question 6
+
+Split the data! Feel free to recreate what you did for Question 2 of the Lab 08R.
+```{r}
+set.seed(101)
+train <- sample(nrow(predictors),round(0.7*nrow(predictors)))
+
+pred.train <- predictors[train,]
+pred.test  <- predictors[-train,]
+resp.train <- response[train]
+resp.test  <- response[-train]
+```
+
+## Question 7
+
+Your next job is to learn a classification tree. Do that, and output a confusion matrix. (Note that the use of the `predict()` function might be, for you, a little different here: use `type="class"` as an argument, so that the output is not a probability but a classification. You can use the output directly when creating the confusion matrix.) What is the misclassification rate? (If you split your data in the same manner as you did for linear regression, is the MCR lower? Just make a mental note.)
+```{r}
+rpart.out <- rpart(resp.train~.,data=pred.train)
+
+resp.pred <- predict(rpart.out,newdata=pred.test,type="class")
+(rpart.mcr <- mean(resp.pred!=resp.test))
+table(resp.pred,resp.test)
+```
+```
+For me, at least, the MCR fell from 0.369 to 0.307. That's pretty substantial.
+```
+
+## Question 8
+
+Let's follow up on the material presented on Tuesday by computing the Area Under Curve (AUC) for the decision tree model. Dealing with prediction is a bit tricky as the argument change a bit from model to model, but what you'd want to do here is run
+
+- resp.pred <- predict(rpart.out,newdata=pred.test,type="prob")[,2]
+
+and then mimic the material presented in the notes on Tuesday to generate an AUC.
+```{r}
+resp.pred <- predict(rpart.out,newdata=pred.test,type="prob")[,2]
+suppressMessages(library(pROC))
+roc(resp.test,resp.pred)$auc
+```
+
+## Question 9
+
+Plot your classification tree (perhaps with the argument `extra=104` or `extra=106`) and determine if pruning is necessary using `plotcp()`. Make a mental note about the pruning...but see Question 9.
+```{r}
+rpart.plot(rpart.out,extra=104)
+plotcp(rpart.out)
+```
+
+## Question 10
+
+Here, I suspect you saw clear evidence that pruning would be useful. Go ahead, prune the tree and replot the pruned tree. Also, compute the misclassification rate: did pruning make things worse?
+```{r}
+rpart.pruned <- prune(rpart.out,cp=0.17)
+class.pred <- predict(rpart.pruned,newdata=pred.test,type="class")
+rpart.plot(rpart.pruned)
+round(mean(class.pred!=resp.test),3)
+table(class.pred,resp.test)
+```
+```
+For me, going from a six-leaf to a two-leaf tree really made no difference at all! Non-violence is apparently the only informative variable, in tree land.
+```

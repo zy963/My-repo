@@ -1,0 +1,141 @@
+---
+title: "Lab_05T"
+author: "36-600"
+date: "Fall 2022"
+output: 
+  html_document:
+    toc: no
+    toc_float: no
+    theme: spacelab
+---
+
+To answer the questions below, it will help you to refer to Sections 10.3 and 10.5 of ISLR; it might also help you to refer to your previous lab work (and, as always, to Google). 
+
+## Question 1
+
+Let's create a fake data frame with three rows and three columns:
+```{r}
+(df <- data.frame(x=1:3,y=1:3,z=1:3))
+```
+Computing *by hand*, what is the Euclidean distances between the fake datum of row 1 and the fake data of rows 2 and 3? And what is the Euclidean distance between the fake data of rows 2 and 3?
+```
+d = sqrt((2-3)^2 + (2-3)^2 + (2-3)^2) = 1.73
+```
+
+## Question 2
+
+Now compute the Euclidean distances using the `dist()` function. Show the output from this function. Does that output match your hand-computed quantities? If not, go back and think re-do your calculation in Question 1. If so, then you now have a sense as to what the "distance between two data points" is, in practice. Note the appearance of the output: the distances are stored in a lower-triangular matrix.
+```{r}
+dist(df[2:3, ])
+```
+
+## Dataset 1
+
+Here we import some data on stars either in, or in the same general direction as, the Draco Dwarf Galaxy.
+```{r}
+file.path <- "https://raw.githubusercontent.com/pefreeman/36-290/master/EXAMPLE_DATASETS/DRACO/draco_photometry.Rdata"
+load(url(file.path))
+df <- data.frame(ra,dec,velocity.los,log.g,mag.g,mag.r,mag.i)
+rm(file.path,ra,dec,velocity.los,log.g,temperature,mag.u,mag.g,mag.r,mag.i,mag.z,metallicity,signal.noise)
+```
+
+`df` is a data frame with 2778 rows and 7 columns. See this [README file](https://github.com/pefreeman/36-290/tree/master/EXAMPLE_DATASETS/DRACO) for a full description of the data and its variables.
+
+## Question 3
+
+Use `dplyr` functions to filter the data frame such that it only contains values of `dec` &gt; 56, values of `ra` &lt; 264, and values of `velocity.los` between -350 and -250. (Put a space between the "<" and the "-" when you filter on the latter velocity, otherwise `R` will see the assignment operator and act accordingly.) Mutate the data frame to have g-r and r-i colors (call them `gr` and `ri`), then delete the magnitudes and `velocity.los`. (Pro tip: you can "negatively select" columns by putting minus signs in front of the column names.) Save the resulting data frame as `df.new`.
+```{r}
+library(tidyverse)
+
+df1 <- df %>% filter(., dec > 56, ra < 264, velocity.los > -350 & velocity.los < -250)
+df2 <- df1 %>% mutate(., gr = mag.g - mag.r, ri = mag.r - mag.i)
+df.new <- df2 %>% select(., -mag.g ,-mag.r, -mag.r, -mag.i, velocity.los)
+head(df.new)
+```
+
+## Question 4
+
+Use the `kmeans()` function to cluster the data in your data frame. Try different values for $k$, and finally display results for what *you* would choose as its optimal value. The default for `nstart` is 1; that should be increased to something larger...play with the values for this argument. Display the results using `ggpairs()`. Pass this argument to `ggpairs()`: `mapping=aes(color=factor(km.out$cluster))`, where `km.out` is the output from $K$-means, and `cluster` is the number of the cluster to which a datum has been assigned. Remember to `scale()` your data! Also, note that `kmeans()` utilizes random sampling, so you should absolutely set a random number seed immediately before calling `kmeans()` to ensure reproducibility!
+```{r}
+library(GGally)
+
+km.out <- kmeans(scale(df.new),5,nstart=20)
+color <- km.out$cluster
+ggpairs(df.new, mapping=aes(color=factor(km.out$cluster)))
+# the bss / tss stops changing after nstart = 20
+```
+
+## Question 5
+
+For your final run of K-means, what are the number of groups and the number of data in each group? Also, what is ratio of the between-cluster sum-of-squares to the total sum-of-squares? (This is a measure of the total variance in the data that is "explained" by clustering. Higher values [closer to 100%] are better, but beware: the larger the value of $K$, the higher the ratio is going to be: you will be getting into the realm of overfitting.) (Hint: `print()` your saved output from `kmeans()`.)
+
+```{r}
+print(km.out)
+```
+```
+between_SS / total_SS =  43.6 %
+```
+
+## Question 6
+
+Now utilize one of the methods presented in class for determinining the optimal value of $k$, while noting that some methods provide more concrete results than others.
+```{r}
+wss <- rep(NA,10)
+for ( ii in 1:10 ) { 
+  km.out <- kmeans(scale(df.new),ii,nstart=20); wss[ii] <- km.out$tot.withinss;
+}
+plot(1:10,wss,xlab="k",ylab="Within-Cluster Sum-of-Squares",pch=19,col="blue",typ="b")
+
+# the elbow occurs around k = 4
+```
+
+## Dataset 2
+
+## Question 7
+
+Now input the diamonds dataset (`diamonds.csv`); download it from the `DATA` directory on `Canvas`. Once the data frame is input, remove the columns `X`, `cut`, `color`, and `clarity` from it, and call the resulting data frame `df.new`.
+
+```{r}
+df <- read.csv("diamonds.csv",stringsAsFactors=TRUE)
+df %>% select(.,-X,-cut,-color,-clarity) -> df.new
+```
+
+## Question 8
+
+The diamonds dataset is too large to input into $K$-means as is. (I have discovered this myself, to my sorrow!) So we will randomly select 1000 rows from the data frame and work with those. First, run this code (while noting that you can change the seed to whatever you like):
+```
+set.seed(303)
+s <- sort(sample(nrow(df.new),1000))
+```
+Then utilize the `slice()` function from `dplyr` to select the rows recorded in the vector `s`, and save the output to `df.small`.
+
+```{r}
+set.seed(303)
+s <- sort(sample(nrow(df.new),1000))
+
+df.small <- slice(df, s)
+```
+
+## Question 9
+
+Now we can do $K$-means. But we'll do things a little differently this time: here, we will first use the gap statistic to estimate the optimal value of $k$. Keep that value in mind for the next question below.
+```{r}
+set.seed(202)
+library(cluster)
+library(factoextra)
+
+d <- df.small %>% select(., -cut, -clarity, -color)
+gs <- clusGap(scale(d),FUN=kmeans,nstart=20,K.max=20,B=50)
+fviz_gap_stat(gs)
+```
+
+## Question 10
+
+In Question 4, we explored using different values of $k$, and through the use of `ggpairs()` we determined that for the stellar data, $k$ should be 2 or 3. In Question 8, on the other hand, we let the gap statistic function determine the optimal value for $k$...and now here we will use `ggpairs()` to visualize the results of assuming this optimal value only. Do this below.
+
+You need not state an answer to this question, but: does it appear that there are natural clusters in the data that were uncovered using $K$-means, or does it appear that the data were simply split into pieces? (Look at, e.g., `price` versus `carat`; that scatter plot *might* influence your thinking. Note that there not necessarily a right answer here. Interpretation, meet ambiguity.)
+```{r}
+set.seed(202)
+
+pairs(~X+carat+cut+color+clarity+depth+table+price+x+y+z,data = df.small, main = "Scatterplot Matrix")
+```

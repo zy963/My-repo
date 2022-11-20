@@ -1,0 +1,178 @@
+---
+title: "Lab: ggplot"
+author: "36-600"
+date: "Fall 2022"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: spacelab
+---
+
+## Data
+
+We'll importing the same data that we used for the `dplyr` lab, with rows with data with value 99 (i.e., rows with missing data) removed:
+```{r}
+suppressMessages(library(tidyverse))
+rm(list=ls())
+file.path = "https://raw.githubusercontent.com/pefreeman/36-290/master/EXAMPLE_DATASETS/BUZZARD/Buzzard_DC1.Rdata"
+load(url(file.path))
+set.seed(101)
+s = sample(nrow(df),4000)
+df = df[s,]
+df %>% filter(.,u!=99&g!=99&r!=99&i!=99&z!=99&y!=99) -> df.new
+predictors = df.new[,-c(7:14)]
+redshift   = as.vector(df.new[,14])
+
+type = rep("FAINT",nrow(predictors))
+w = which(predictors$i<25)
+type[w] = "BRIGHT"
+type = factor(type)
+predictors = cbind(type,predictors)
+
+df = cbind(predictors,redshift)
+```
+
+If everything loaded correctly, you should see a variable in your global environment called `df`, a data frame with 3607 rows and 8 columns.
+
+## ggplot
+
+We will use `ggplot` to create our plots. In order to become comfortable quickly with `ggplot`, you should read through Chapter 3 (online; Chapter 1 in print) of *R for Data Science* by Wickham and Grolemund, available for free [here](http://r4ds.had.co.nz/).
+
+The following is an example of a `ggplot` call:
+```{r}
+ggplot(data=df,mapping=aes(x=redshift)) +
+  geom_histogram() # ignore the picky complaint about bins
+```
+
+Note the structure here: the first function is `ggplot()`, and you pass a data frame (as `data`) and an identification of which feature goes along which axis (as `mapping`). Once you've identified the data and the mapping, you "add on" another function that describes what you will do to the data; in this case, that function is `geom_histogram()`.
+
+# Questions
+
+## Question 1
+
+Re-run ggplot from above, setting the number of bins to be 60. (Use the documentation for `geom_histogram()` to figure out how to do this...e.g., type `?geom_histogram` in the Console pane.) Also, change the color of the histogram via the `fill` argument. Google "R colors" to find listings of the names of `R`'s colors. My personal favorite is "papayawhip".
+```{r}
+ggplot(data=df,mapping=aes(x=redshift)) +
+  geom_histogram(bins = 60, colour = "papayawhip", fill = "antiquewhite3")
+```
+
+## Question 2
+
+Repeat Question 1, but change the x-axis label to "Redshift z" and the y-axis label to "Number of Galaxies at Redshift z". Also, add a title to the plot: "Redshift Distribution for Buzzard DC1 Data". Google phrases like "how to add a title to ggplot". Trust me: Googling is the fastest way to figure out what function does what in the `ggplot` world.
+```{r}
+ggplot(data=df,mapping=aes(x=redshift)) +
+  geom_histogram(bins = 60, colour = "papayawhip", fill = "antiquewhite3") +
+  labs(x = "Redshift z", y = "Number of Galaxies at Redshift z") +
+  ggtitle("Redshift Distribution for Buzzard DC1 Data")
+```
+
+## Question 3
+
+Construct a bar chart that shows the distribution of galaxy `type`, here defined to be `BRIGHT` and `FAINT`. Remember that a bar chart is a representation of a probability mass function. As a reminder to yourself, also show the number of counts for each type, coded in some manner that you've learned thus far.
+```{r}
+ggplot(data = df, mapping = aes(x = type)) +
+  geom_bar(width=0.3, color='red',fill='steelblue') +
+  geom_text(stat='count',aes(label=..count..), vjust=1.6, color="white", size=3.5) 
+```
+
+## Question 4
+
+Utilize facet wrapping to display two histograms side-by-side: one showing `u`-band magnitudes for `BRIGHT` data, and one showing `u`-band magnitudes for `FAINT` data. Note that to compare distributions, it is helpful *to have the data span the same scale*. So add a function to the string of functions that sets the x-axis limits to be 20 and 32.
+```{r}
+library(ggpubr)
+
+b <- df %>% filter(., type == 'BRIGHT')
+p1 <- ggplot(data=b,mapping=aes(x=u)) +
+  geom_histogram(bins = 60, colour = "papayawhip", fill = "antiquewhite3") +
+  labs(x = "`u`-band") +
+  ggtitle("`u`-band magnitudes for `BRIGHT` data") +
+  xlim(c(20, 32))
+
+f <- df %>% filter(., type == 'FAINT')
+p2 <- ggplot(data=f,mapping=aes(x=u)) +
+  geom_histogram(bins = 60, colour = "papayawhip", fill = "antiquewhite3") +
+  labs(x = "`u`-band") +
+  ggtitle("`u`-band magnitudes for `FAINT` data")+
+  xlim(c(20, 32))
+
+ggarrange(p1, p2, ncol = 2, nrow = 1)
+```
+
+## Question 5
+
+Show the same information as in Question 4, except use overlapping, partially transparent histograms. Construct such a histogram (again for `u`). (Hints: in the call to `aes()` in the `ggplot()` call, include `fill=type`, and in the `geom_histogram()` call, include two new arguments: `alpha` and `position="Identity"`. The `alpha` argument controls the transparency: 0 for invisible to 1 for totally opaque.
+```{r}
+b <- df %>% filter(., type == 'BRIGHT')
+f <- df %>% filter(., type == 'FAINT')
+
+ggplot(data=df,mapping=aes(x=u, fill = type)) +
+  geom_histogram(bins = 60, colour = "papayawhip",  position="Identity") +
+  labs(x = "`u`-band") +
+  geom_histogram(bins = 60, colour = "papayawhip",  alpha = 0.8, position="Identity") +
+  labs(x = "`u`-band") +
+  ggtitle("`u`-band magnitudes")
+```
+
+## Question 6
+
+Show the same information as in Question 4, except that instead of using side-by-side histograms, use side-by-side boxplots. Unlike in Question 4, you do not need to apply `facet_wrap()`. Instead, for the aesthetics, specify that `x` is `type` and `y` is `u`.
+```{r}
+b <- df %>% filter(., type == 'BRIGHT')
+p1 <- ggplot(data=b,mapping=aes(x=type,y=u)) +
+  geom_boxplot(fill = "red") +
+  labs(x = "`u`-band") +
+  ggtitle("`u`-band magnitudes for `BRIGHT` data")
+
+f <- df %>% filter(., type == 'FAINT')
+p2 <- ggplot(data=f,mapping=aes(x=type,y=u)) +
+  geom_boxplot(fill = "blue") +
+  labs(x = "`u`-band") +
+  ggtitle("`u`-band magnitudes for `FAINT` data")
+
+ggarrange(p1, p2, ncol = 2, nrow = 1)
+```
+
+## Question 7
+
+Create a faceted histogram for the `u`, `g`, `r`, `i`, `z`, and `y` columns in the `df` data frame. This means you'll want to pipe `df` to `select()` (or, perhaps, `dplyr::select()`), then to `gather()`, and save the output to a new variable, then you'll want to pass this new data frame into `ggplot()`. Set the x-axis limits to be 20 and 32. Replace the x-axis label with "Magnitude".
+```{r}
+n <- gather(df %>% select(.,u, g, r, i, z, y), key = 'character', value = 'number')
+ggplot(data = n, mapping=aes(x = number)) + 
+  geom_histogram() +
+  xlim(c(20, 32)) +
+  labs(x = "Magnitude") +
+  facet_wrap(~character, scales = 'free')
+```
+
+## Question 8
+
+Use `geom_point()` to create a scatter plot of `redshift` vs. r-band magnitude. (Remember, one plots $y$ vs. $x$, so `redshift` will go on the $y$-axis here.) Make the point size 0.5, change the x-axis label to "r-band magnitude", and change the y-axis label to "Redshift". Oh, and add some color! 
+```{r}
+ggplot(data = df, mapping = aes(x = r, y = redshift))+
+  geom_point(size = 0.5)+
+  labs(x = "r-band magnitude", y = "Redshift")
+```
+
+## Question 9
+
+Use the `corrplot()` function to assess the levels of correlation between the different columns of the `df` data frame, except `type`. Utilize the example in the notes. Note that you make need to install the `corrplot` package; you can do so by, e.g., typing `install.packages("corrplot")` in the Console, at the prompt. What should you see? That magnitudes are *very* highly correlated.
+```{r}
+library(corrplot)
+
+df %>% 
+  dplyr::select(.,u, g, r, i, z, y) %>% 
+  cor(.) %>% 
+  corrplot(.,method="ellipse")
+```
+
+## Question 10
+
+Repeat Question 9, but utilize `mutate()` to create five new variables: `ug`, the difference between `u` and `g`; `gr`, the difference between `g` and `r`; etc. Select only the five new variables, and plot the correlation plot. The new variables are dubbed *colors* and are often used by astronomers because they should only be a function of the physics of galaxies, as opposed to physics and distance. Ultimately, you should find that the correlation between colors is *far less* than the correlation between magnitudes.
+```{r}
+df.newer <- df %>% mutate(., ug = u - g, gr = g - r, ri = r - i, iz = i - z, zy = z - y)
+df.newer %>% 
+  dplyr::select(.,ug, gr, ri, iz, zy) %>% 
+  cor(.) %>% 
+  corrplot(.,method="ellipse")
+```

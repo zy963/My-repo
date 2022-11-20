@@ -1,0 +1,114 @@
+---
+title: "Lab_10R"
+author: "36-600"
+date: "Fall 2022"
+output: 
+  html_document:
+    toc: no
+    toc_float: no
+    theme: spacelab
+---
+
+# Data
+
+Below we read in the breast-cancer dataset last seen in the PCA lab:
+```{r}
+df         <- read.csv("http://www.stat.cmu.edu/~pfreeman/breastcancer.csv",stringsAsFactors=TRUE)
+response   <- df[,1]  # B for benign, M for malignant
+predictors <- data.frame(scale(df[,-1]))
+cat("Sample size: ",length(response),"\n")
+```
+These data reside on [Kaggle](https://www.kaggle.com/mciml/breast-cancer-wisconsin-data). They provide information on breast cancer tumors (read: features extracted from images of cells!) for 569 people in which malignancy was suspected. The data are marked by *extreme* multicollinearity and redundancy: bad for inference, but fine for prediction! You'll code KNN and SVM models for these data below.
+
+**Note that I scaled (i.e., standardized) the predictor data frame.** This is required for both KNN and SVM.
+
+Also note: differentiating the benign and malignant tumors is pretty easy, so you will not see results that are substantially better, if at all better, than what you get when you learn a logistic regression model. The point today is the coding, not to get a reaction of "oh, wow, see how much better KNN and SVM do!"
+
+## Question 1
+
+Split the data and carry out a logistic regression analysis. Assume a class-separation threshold of 0.5, which is not optimal but good enough, particularly since changing that threshold in the context of KNN is difficult. (The optimal threshold would be nearer to 0.373. Why 0.373? The classes are imbalanced, and since `B` has more data (62.7% of the data) and is Class 0, the Class 1 probabilities will be systematically pulled downwards towards zero...and a decent guess at the optimal threshold would be 1 - 0.627 = 0.373.)
+```{r}
+set.seed(101)
+s = sample(length(response),round(0.7*length(response)))
+
+pred.train = predictors[s,]
+pred.test  = predictors[-s,]
+resp.train = response[s]
+resp.test  = response[-s]
+df.train <- df[s,]
+df.test  <- df[-s,]
+
+glm.fit <-  glm(resp.train~.,data=pred.train,family=binomial)
+
+resp.prob <-  predict(glm.fit, newdata=pred.test,type="response")  
+resp.pred <-  ifelse(resp.prob>0.5,"M","B")
+
+mean(resp.pred!=resp.test)
+table(resp.pred, resp.test)
+```
+
+## Question 2
+
+Use the sample code in today's notes (altered for classification!...see the last slide) to implement a KNN model. You will want to plot the validation-set MCR versus $k$. (Note: wherever it says `mse.k` in the notes, do `mcr.k` here.) A value of `k.max` of 30 should be fine for you.
+```{r}
+suppressMessages(library(FNN))
+
+k.max = 30
+mcr.k = rep(NA,k.max)
+for ( kk in 1:k.max ) {
+  knn.out = knn.cv(train=pred.train,cl=resp.train,k=kk,algorithm="brute")
+  mcr.k[kk] = mean(knn.out!=resp.train)
+}
+k.min = which.min(mcr.k)
+cat("The optimal number of nearest neighbors is ",k.min,"\n")
+```
+
+## Question 3
+
+For SVM, we will work with the `e1071` package. (Its name comes from the coding for the Institute of Statistics and Probability Theory at the Technische Universitat Wien, in Vienna. It's like us calling a package `36-600`. Which we should.) Here, code a support vector classifier (meaning, do SVM with `kernel="linear"`): use the `tune()` function with a representative sequence of potential costs $C$, then extract the best model. If the optimum value of $C$ occurs at or very near the end of your sequence of potential costs, alter the sequence. The variable `best.parameters`, embedded in the output, provides the optimal value for $C$. Provide that value. Use the best model to generate predictions, a test-set MCR, and a confusion matrix.
+
+Note: `e1071` is prickly about wanting the response vector to be part of the predictor data frame. To join the predictors and response together, do the following: `pred.train <- cbind(pred.train,resp.train)`. `cbind()` means "column bind." You need not bind the test variables together.
+
+Note that `tune()` does cross-validation on the training set to estimate the optimum value of $C$. Which means that the training data are randomly assigned to folds (by default, 10...to change this, you'd make a call like `tune.control(cross=5)`). Which means you should set a random number seed before calling `tune()`. For reproducibility n'at.
+
+See the third code block of page 364 of `ISLR` (first edition) for an example of how to specify ranges of tuning parameters. Note there is only one here: `cost`. As for prediction: `tune()` will return an object that includes `best.model`. Pass this to `predict()` along with the argument `newdata=` whatever you call the test predictors data frame. By default, `predict()` will output a vector of class predictions, so there is no need to round off to determine classes.
+```{r}
+suppressMessages(library(e1071))
+
+tune.out = tune(svm,Diagnosis~.,data=df.train,kernel="linear",ranges=list(cost=10^seq(-2,2,by=0.2)))
+cat("The estimated optimal value for C is ",as.numeric(tune.out$best.parameters),"\n")
+
+resp.pred = predict(tune.out$best.model,newdata=df.test)
+head(resp.pred)
+```
+
+## Question 4
+
+Now code a support vector machine with a polynomial kernel. In addition to tuning `cost`, you also have to tune the polynomial `degree`. Try integers from 2 up to some maximum number (not too large, like 4). (Note: if you get the warning `WARNING: reaching max number of iterations`, do not worry about it.)
+```{r}
+tune.out = tune(svm,Diagnosis~.,
+                data=df.train,
+                kernel="polynomial",
+                ranges=list(cost=10^seq(2,4,by=0.5),degree=2:4))
+
+cat("The estimated optimal values for C and degree are ",as.numeric(tune.out$best.parameters),"\n")
+
+resp.pred = predict(tune.out$best.model,newdata=df.test)
+(svm.poly.mcr = mean(resp.pred!=df.test$Diagnosis))
+```
+
+## Question 5
+
+Now code a support vector machine with a radial kernel. In addition to tuning `cost`, you also have to tune the parameter `gamma`. Try a base-10 logarithmic sequence of values that includes -8 (for $10^{-8}$).
+```{r}
+tune.out = tune(svm,Diagnosis~.,
+                data=df.train,
+                kernel="radial", 
+                ranges=list(cost=10^seq(-1,1,by=0.5),
+                            gamma=10^seq(-10,10,by=0.4)))
+cat("The estimated optimal values for C and gamma are ",as.numeric(tune.out$best.parameters),"\n")
+
+resp.pred = predict(tune.out$best.model,newdata=df.test)
+(svm.poly.mcr = mean(resp.pred!=df.test$Diagnosis))
+```
+

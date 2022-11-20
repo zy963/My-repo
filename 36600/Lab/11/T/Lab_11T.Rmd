@@ -1,0 +1,125 @@
+---
+title: "Lab_11T"
+author: "36-600"
+date: "Fall 2022"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: spacelab
+---
+
+## Data
+
+Below we read in the `EMLINE_MASS` dataset, in which the strengths of 10 emission lines are recorded for each of 21,046 galaxies, along with the galaxy masses. (The "masses" are actually the logarithms of the masses as measured in solar masses. So a "mass" of 9 means the galaxy has a mass of 1 billion solar masses.)
+```{r}
+file.path = "https://raw.githubusercontent.com/pefreeman/36-290/master/EXAMPLE_DATASETS/EMLINE_MASS/emission_line_mass.Rdata"
+load(url(file.path))
+rm(file.path)
+x = predictors$H_ALPHA
+x.tmp = log10(x[x>0])
+y     = responses[x>0,1]
+x     = x.tmp
+df    = data.frame(x,y)
+```
+Today we are simply playing around with kernel density estimation and kernel regression, so all we are going to keep is the values for the strongest emission line, the so-called "H$\alpha$" line at 656 nanometers (which we will call $x$), and the masses (which we will call $y$). We also filter the data so as to keep only positive emission line strengths, so that we can implement a logarithmic transformation for $x$.
+
+# Questions
+
+## Question 1
+
+Do some EDA. First, use `ggplot2` to create a histogram for $x$, and then use it to make a scatter plot of $x$ and $y$. Don't worry about downsampling the amount of data; rather, change the transparency of the points by setting the alpha parameter to, e.g., 0.1.
+```{r}
+suppressMessages(library(tidyverse))
+
+ggplot(data=df,mapping=aes(x=x)) +
+  geom_histogram()
+
+ggplot(data=df,mapping=aes(x=x,y=y)) +
+  geom_point(color="orchid",size=0.5, alpha = 0.1)
+```
+
+## Question 2
+
+Create a density estimate for $x$ using the `density()` function and the default bandwidth. Print the default bandwidth. Then overlay the density estimate on top of a density histogram. One creates a density histogram by adding an extra argument to `geom_histogram()`: `aes(y=..density..)`. One can then overlay the density estimate using an additional call to `geom_line()`, to which you pass a data frame with the $x$ output of `density()` in one column and the $y$ output of `density()` in the other.
+```{r}
+ggplot(df, aes(x=x)) + 
+ geom_histogram(aes(y=..density..), colour="black", fill="white")+
+ geom_density(alpha=0.2, fill="#FF6666")
+```
+
+## Question 3
+
+Repeat Q2, but use the unbiased cross-validation estimator, whose use is specified in the notes. Again, print the bandwidth and make the same density estimate overlaid onto histogram plot as in Q2. Stare hard at the two plots, the one here and the one in Q2: can you see any differences in the density estimates?
+```{r}
+density(x, bw = "ucv")
+
+ggplot(df, aes(x=x)) +
+ geom_histogram(aes(y=..density..), colour="black", fill="white")+
+  stat_density(bw = "ucv", alpha=0.5, fill="#FF6666")
+ # geom_density(alpha=0.2, fill="#FF6666")
+```
+```
+Two graphs are slightly different.
+```
+
+## Question 4
+
+Density estimates tend to work fine with unbounded data, but can exhibit so-called *boundary bias* if the data values are bounded on either or both sides. Repeat Q3, except run the code for only $x$ values between 0 and 1, and set the bandwidth manually to 0.1. What do you observe? (To subset the data, do, e.g., `x.bound = x[x>0 & x<1]`.)
+```{r}
+df1 = df %>% filter(.,x<1 & x>0)
+
+ggplot(df1, aes(x=x)) +
+ geom_histogram(aes(y=..density..), colour="black", fill="white")+
+  stat_density(bw = 0.1, alpha=0.5, fill="#FF6666")
+```
+```
+The estimation changed a lot and doesn't look like the two above.
+```
+
+## Question 5
+
+Pick 20 points at random from the initial, unbounded $x$ sample. Perform density estimates with "gaussian", "triangular", and "epanechnikov" kernels. Use `ggplot()` to draw the three density estimates (without the histogram). Do you see any significant differences in the estimates?
+```{r}
+set.seed(505)
+s <- sample(nrow(df),20)
+df.s <- df[s,]
+
+suppressMessages(library(ggpubr))
+
+p1 <- ggplot(df.s, aes(x=x)) +
+  stat_density(bw = 0.1, alpha=0.5, kernel = "gaussian")
+
+p2 <- ggplot(df.s, aes(x=x)) +
+  stat_density(bw = 0.1, alpha=0.5, kernel = "triangular")
+
+p3 <- ggplot(df.s, aes(x=x)) +
+  stat_density(bw = 0.1, alpha=0.5, kernel = "epanechnikov")
+
+ggarrange(p1, p2, p3, ncol = 3, nrow = 1)
+```
+```
+Yes, the smoothness differs from each other.
+```
+
+## Question 6
+
+Estimate galaxy mass from emission-line strength using the Nadaraya-Watson kernel estimator.
+
+In the normal model learning paradigm, you split the data and learn the model using the training data, then apply the model to predict response values for the test data. You then compute the MSE.
+
+For Nadaraya-Watson, the way this would play out is that we would split the data, then perform, e.g., cross-validation on the *training* set to determine the optimal value of $h$. We would then apply this value of $h$ when working with the test data, and when computing the MSE.
+
+Here, we are going to keep things simple: do not split the data, and compute a plug-in value of $h$ using one of the `bandwidth` functions in the base `stats` package. (Type, e.g., `?bw.nrd0` at the prompt in the Console pane.) Estimate $\hat{y}$ for all the data using a Gaussian kernel, then plot the predicted response vs. the observed response. (Note that this is a little tricky! 
+
+First, you have to specify `x.points=x` in the call to `ksmooth()`, so that the model is actually evaluated at the input points $x$ rather than along a default grid. Then you have to compare `out$y` versus `y[order(x)]` in the diagnostic plot, because `ksmooth()` sorts the $x$ values in ascending order. This is all a bit painful to figure out. Your final diagnostic plot won't look great...but that's OK, because we've really simplified the regression here [only one predictor variable, not ten].)
+```{r}
+density(x, bw = "nrd0")
+
+fit.nw <- ksmooth(x, y, kernel="normal", bandwidth = 0.09539)
+pred.nw <- ksmooth(x, y, kernel="normal", bandwidth = 0.09539, x.points=x)
+
+ggplot(data=data.frame("x"=y[order(x)],"y"=pred.nw$y), mapping=aes(x=x,y=y)) + 
+  geom_point(alpha = 0.1, color="#FF6666")
+```
+

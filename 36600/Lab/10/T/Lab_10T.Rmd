@@ -1,0 +1,166 @@
+---
+title: "Lab_10T"
+author: "36-600"
+date: "Fall 2022"
+output: 
+  html_document:
+    toc: no
+    toc_float: no
+    theme: spacelab
+---
+
+# Regression
+
+We import the heart-disease dataset and log-transform the response variable, `Cost`:
+```{r}
+df      <- read.csv("http://www.stat.cmu.edu/~pfreeman/heart_disease.csv",stringsAsFactors=TRUE)
+df      <- df[,-10]
+w       <- which(df$Cost > 0)
+df      <- df[w,]
+df$Cost <- log(df$Cost)
+```
+
+## Question 1
+
+Split these data into training and test sets, reusing the code you used in Lab 06R and Lab 09T.
+```{r}
+set.seed(505)
+s <- sample(nrow(df),round(0.7*nrow(df)))
+df.train <- df[s,]
+df.test <- df[-s,]
+```
+
+## Question 2
+
+Learn a random forest model given the training data, and compute the MSE. Remember to set `importance=TRUE`. **Note: for reproducible results, set the seed before running random forest!** Assuming you split the data in the same manner as you did before, feel free to look back at your other labs and see if the MSE is smaller here. (For me and my split? It is...about 10% smaller than for a regression tree.)
+```{r}
+suppressMessages(library(tidyverse))
+suppressMessages(library(randomForest))
+
+rf.out = randomForest(Cost~.,data=df.train,importance=TRUE)
+resp.pred = predict(rf.out,newdata=df.test)
+
+round(mean((resp.pred-df.test$Cost)^2),3)
+```
+
+## Question 3
+
+Create the variable importance plot. Remember to pass `type=1` as an argument to this plot. Mentally note the important variables. These should be consistent with those variables that appeared in your regression tree in the tree lab.
+```{r}
+varImpPlot(rf.out,type=1)
+```
+
+## Question 4
+
+Show the diagnostic plot of predicted test-set response values vs. observed test-set response values. As usual, make sure the limits are the same along both axes and plot a diagonal line with slope 1.
+```{r}
+ggplot(data=data.frame("x"=resp.pred, "y"=df.test$Cost),mapping=aes(x=x,y=y)) + 
+  geom_point() +
+  geom_abline(slope=1,intercept=0,color="red") + 
+  xlim(0,12) + ylim(0,12)
+```
+
+## Question 5
+
+Now learn an extreme gradient boosting model, and show the test-set MSE. Note that in order to do this, we have to remove the variables `Gender`, `Drugs`, and `Complications`, which are factor or factor-like variables, and for ease of code implementation, we will break up `df.train` and `df.test` into predictor and response variables:
+```{r}
+df.train %>% dplyr::select(.,-Gender,-Drugs,-Complications) -> df.train
+df.test  %>% dplyr::select(.,-Gender,-Drugs,-Complications) -> df.test
+resp.train <- df.train[,1]
+resp.test  <- df.test[,1]
+pred.train <- df.train[,-1]
+pred.test  <- df.test[,-1]
+```
+Note that by doing this, the MSE that we get might not be as good as for random forest. But we'll see!
+```{r}
+rf.out1 = randomForest(resp.train~.,data=pred.train,importance=TRUE)
+resp.pred = predict(rf.out1,newdata=pred.test)
+
+round(mean((resp.pred-resp.test)^2),3)
+```
+
+## Question 6
+
+Create a variable importance plot for the extreme gradient boosting model. Make a mental note about whether the variables identified as important here are also the more important ones identified by random forest.
+```{r}
+varImpPlot(rf.out1,type=1)
+```
+
+---
+
+# Classification
+
+We will now load in the data on political movements that you looked at in previous labs:
+```{r}
+file.path <- "http://www.stat.cmu.edu/~pfreeman/movement.Rdata"
+load(url(file.path))
+f <- function(variable,level0="NO",level1="YES") {
+  n               <- length(variable)
+  new.variable    <- rep(level0,n)
+  w               <- which(variable==1)
+  new.variable[w] <- level1
+  return(factor(new.variable))
+}
+predictors$nonviol      <- f(predictors$nonviol)
+predictors$sanctions    <- f(predictors$sanctions)
+predictors$aid          <- f(predictors$aid)
+predictors$support      <- f(predictors$support)
+predictors$viol.repress <- f(predictors$viol.repress)
+predictors$defect       <- f(predictors$defect)
+levels(response)        <- c("FAILURE","SUCCESS")
+rm(file.path,id.half,id,predictors.half)
+```
+
+Note that given the number of factor variables in this dataset, we'll forego learning a boosting model below.
+
+## Question 7
+
+Split the data! Feel free to recreate what you did for previous labs.
+```{r}
+set.seed(505)
+s <- sample(nrow(predictors),round(0.7*nrow(predictors)))
+predictors.train <- predictors[s,]
+predictors.test <- predictors[-s,]
+```
+
+## Question 8
+
+Learn a random forest model. Output probabilities for Class 1 (see the notes!) but do not output a confusion matrix or output a misclassification rate. It will become clear why we will hold off on computing this quantities for now... However, having said all this, do go ahead and plot the variable importance plot here.
+```{r}
+rf.out2 = randomForest(nonviol~.,data=predictors.train,importance=TRUE)
+out.pred = predict(rf.out2,newdata=predictors.test,type="prob")[,2]
+
+varImpPlot(rf.out2,type=1)
+```
+
+## Question 9
+
+Plot a ROC curve for random forest, and output the AUC value.
+```{r}
+suppressMessages(library(pROC))
+
+ggroc(roc(predictors.test$nonviol,out.pred))
+roc.log <- roc(predictors.test$nonviol,out.pred)
+roc.log$auc
+```
+
+## Question 10
+
+Use Youden's $J$ statistic to determine the optimal class-separation threshold. Output that number. Then, using that threshold, transform the test-set Class 1 probabilities to class predictions, and output the confusion matrix and the misclassification rate. (Note: you can reuse code from Question 7 of Lab 09R, if you wish.)
+```{r}
+J = roc.log$sensitivities + roc.log$specificities - 1
+w = which.max(J)
+cat("Optimum threshold for logistic regression: ",round(roc.log$thresholds[w],3),"\n")
+
+resp.pred = rep(NA,length(out.pred))
+for ( ii in 1:length(out.pred) ) {
+  if (out.pred[ii] >= round(roc.log$thresholds[w],5)) {
+    resp.pred[ii] = "YES"    # fill in name of class 1
+  } else {
+    resp.pred[ii] = "NO"    # fill in name of class 0
+  }
+}
+
+(mcr <- mean(resp.pred != predictors.test$nonviol))
+table(resp.pred, predictors.test$nonviol)
+```

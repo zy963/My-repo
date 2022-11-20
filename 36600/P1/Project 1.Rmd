@@ -1,0 +1,122 @@
+---
+title: "Project 1"
+output: html_document
+---
+## Load the data
+Load the data and show the first 10 rows.
+
+```{r}
+df <- read.csv('creditBalance.csv', header = TRUE)
+head(df, 10)
+```
+## Summarize the data
+Summarize the data with 'summary' function. There are 10 columns and 310 rows in the dataset with no null value. Three of the columns are characteristic (i.e., Gender, Student, Married) and the rest are numeric. And it seems like there is no redundant columns or numeric columns that should have been traeted as characteristic (assuming 'Education' is some sort of score). A summary is shown as below.
+```{r}
+summary(df)
+dim(df)
+sum(is.na(df))
+```
+
+A faceted histogram for all the variables that are truly quantitative (i.e., Income, Limit, Rating, Cards, Age, Education, Balance).
+```{r}
+library(tidyverse)
+
+n <- gather(df %>% select(.,Income, Limit, Rating, Cards, Age, Education, Balance), key = 'character', value = 'number')
+ggplot(data = n, mapping=aes(x = number)) + 
+  geom_histogram() +
+  facet_wrap(~character, scales = 'free')
+```
+
+A facet bar chart for characteristic columns. We can say the data is balanced in terms of 'Gender' and unbalance in terms of 'Married' (with more married samples). But since 'Age' is pretty wide spread, it seems fair that only a small portion of the samples are 'Student'.
+```{r}
+library(ggpubr)
+
+b <- df %>% select(Gender)
+p1 <- ggplot(data = b, mapping=aes(x=Gender)) +
+  geom_bar(fill = "gray") +
+  ggtitle("Gender")
+
+b <- df %>% select(Student)
+p2 <- ggplot(data = b, mapping=aes(x=Student)) +
+   geom_bar(fill = "gray") +
+  ggtitle("Student")
+
+b <- df %>% select(Married)
+p3 <- ggplot(data = b, mapping=aes(x=Married)) +
+  geom_bar(fill = "gray") +
+  ggtitle("Married")
+
+ggarrange(p1, p2, p3, ncol = 3, nrow = 1)
+```
+
+Assuming 'Balance' is our response variable, create side-by-side boxplots for 'Balance' v.s 'Gender', 'Balance' v.s 'Student', and 'Balance' v.s 'Married'.
+```{r}
+boxplot(df$Balance ~ df$Gender,
+        col='steelblue',
+        main='Balance by Gender',
+        xlab='Gender',
+        ylab='Balance')
+boxplot(df$Balance ~ df$Student,
+        col='steelblue',
+        main='Balance by Student',
+        xlab='Student',
+        ylab='Balance')
+
+boxplot(df$Balance ~ df$Married,
+        col='steelblue',
+        main='Balance by Married',
+        xlab='Married',
+        ylab='Balance')
+```
+
+Show scatter plots of 'Balance' ($y$-axis) versus all the numerical variables.
+```{r}
+a <- df %>% select(Income, Balance)
+p1 <- ggplot(data = a, mapping=aes(y=Income, x = Balance)) +
+  geom_point() +
+  ggtitle("Income")
+
+b <- df %>% select(Limit, Balance)
+p2 <- ggplot(data = b, mapping=aes(y=Limit, x = Balance)) +
+   geom_point() +
+  ggtitle("Limit")
+
+c <- df %>% select(Rating, Balance)
+p3 <- ggplot(data = c, mapping=aes(y=Rating, x = Balance)) +
+  geom_point() +
+  ggtitle("Rating")
+
+d <- df %>% select(Cards, Balance)
+p4 <- ggplot(data = d, mapping=aes(y=Cards, x = Balance)) +
+  geom_point() +
+  ggtitle("Cards")
+
+e <- df %>% select(Age, Balance)
+p5 <- ggplot(data = e, mapping=aes(y=Age, x = Balance)) +
+  geom_point() +
+  ggtitle("Age")
+
+f <- df %>% select(Education, Balance)
+p6 <- ggplot(data = f, mapping=aes(y=Education, x = Balance)) +
+  geom_point() +
+  ggtitle("Education")
+
+ggarrange(p1, p2, p3, p4, p5, p6, ncol = 2, nrow = 3)
+```
+Visually determine the level of correlation (i.e., level of linear dependence) between all the predictor variables, including all the variables, both quantitative and categorical.
+```{r}
+library(corrplot)
+
+df %>% 
+  dplyr::select(., Income, Limit, Rating, Cards, Age, Education, Balance) %>% 
+  cor(.) %>% 
+  corrplot(.,method="ellipse")
+```
+
+```{r}
+library(GGally)
+
+df %>% filter(.,Balance > 0) -> d
+ggpairs(d, progress = F)
+```
+

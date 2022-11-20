@@ -1,0 +1,198 @@
+---
+title: "Lab: EDA"
+author: "36-600"
+date: "Fall 2022"
+output: 
+  html_document:
+    toc: no
+    toc_float: no
+    theme: spacelab
+---
+
+In today's lab, you were perform exploratory data analysis on a dataset related to heart disease and the cost billed to insurance.
+
+# Data
+
+Your first job is to retrieve the dataset, `heart_disease.csv`, from the course `Canvas` site. You will find the dataset in the `DATA` directory in the `Files` hierarchy.
+
+Examine the downloaded data file. Think about how you would input these data (hint: do any strings represent factor variables? do you need to specify column types? etc.). Then...
+
+# Questions
+
+## Question 1
+
+Input the data into `R`, and into a data frame named `df`.
+```{r}
+df <- read.csv('heart_disease.csv', header = TRUE)
+df
+```
+
+## Question 2
+
+Summarize the data, via a base-`R` function mentioned in today's notes. Scan the output to see if there are missing data or if anything appears weird.
+```{r}
+summary(df)
+```
+
+## Question 3
+
+One thing you might have noticed in Question 2 is that `Drugs` apparently can only take on the values 0, 1, and 2, and that `Complications` is either 0 or 1. This hints that these are actually factor variables, and not numeric. For purposes of visualization and analysis, it can be helpful to forcibly transform these variables from being of `numeric` type to being of `factor` type. You would do that as follows:
+```
+df$Drugs <- factor(df$Drugs)
+```
+Convert both variables, and re-display the summary.
+```{r}
+df$Drugs <- factor(df$Drugs)
+df$Complications <- factor(df$Complications)
+summary(df)
+```
+
+## Question 4
+
+Look at your summary output again. Are there any obviously non-informative columns? If so, remove them here. For instance, use `dplyr` functions to remove the offending column(s), and save the output to `df`. Note: to remove a single column, you can name it and put a minus sign in front. Then show the names of the columns of `df` so you can convince yourself that the offending column(s) are gone.
+```{r}
+suppressMessages(library(tidyverse))
+df <- select(df, -id)
+df
+```
+
+## Question 5
+
+Create a faceted histogram for all the variables that are truly quantitative, meaning leave `Gender`, `Drugs`, and `Complications` out. Go back to previous labs and look for how we used the `gather()` function.
+```{r}
+n <- gather(df %>% select(.,Cost, Age, Interventions, ERVisit, Comorbidities, Duration), key = 'character', value = 'number')
+ggplot(data = n, mapping=aes(x = number)) + 
+  geom_histogram() +
+  facet_wrap(~character, scales = 'free')
+```
+
+## Question 6
+
+Look at `Cost`: it is right skew. Make a histogram of the base-10 logarithm of `Cost`, i.e., do
+```
+hist(log10(df$Cost))   # quick'n'dirty, no ggplot needed here!
+```
+Does this look more symmetric? If yes, replace the `Cost` column, i.e., do
+```
+df %>% filter(.,Cost>0) -> df
+df$Cost = log10(df$Cost)
+```
+Note that we will not transform the other right-skew variables that have minimum values of zero.
+```{r}
+hist(log10(df$Cost))
+df %>% filter(.,Cost>0) -> df
+df$Cost = log10(df$Cost)
+```
+
+## Question 7
+
+Create base-`R` tables and `ggplot`-style bar charts for `Gender`, `Drugs`, and `Complications`. (To be clear, issue separate function calls for each variable!)
+```{r}
+library(ggpubr)
+
+b <- df %>% select(Gender)
+p1 <- ggplot(data = b, mapping=aes(x=Gender)) +
+  geom_bar(fill = "gray") +
+  ggtitle("Gender")
+
+b <- df %>% select(Drugs)
+p2 <- ggplot(data = b, mapping=aes(x=Drugs)) +
+   geom_bar(fill = "gray") +
+  ggtitle("Drugs")
+
+b <- df %>% select(Complications)
+p3 <- ggplot(data = b, mapping=aes(x=Complications)) +
+  geom_bar(fill = "gray") +
+  ggtitle("Complications")
+
+ggarrange(p1, p2, p3, ncol = 3, nrow = 1)
+```
+
+## Question 8
+
+Let's visualize `Drugs` and `Complications` at the same time. One way to do this is via a two-way table: simply pass both variable names to `table()` and see what happens. Such visualization can also be done in `ggplot` but it is considerably more complicated a task than we want to tackle here.
+```{r}
+table(df$Drugs, df$Complications)
+```
+
+## Question 9
+
+Let's assume that `Cost` is our response variable: ultimately we want to learn regression models that predict `Cost` given the values of the remaining (predictor) variables. (We'll actually carry this out later!) What we might want to do now is see how `Cost` varies as a function of other variables.
+
+First job: create side-by-side boxplots for `Cost` vs. `Gender`, `Cost` vs. `Drugs`, and `Cost` vs. `Complications`. Just make the plots; you need not write down any conclusions you reach. Simply file them away for when we return to this dataset in a future lab.
+```{r}
+boxplot(df$Cost ~ df$Gender,
+        col='steelblue',
+        main='Cost by Gender',
+        xlab='Gender',
+        ylab='Cost')
+
+boxplot(df$Cost ~ df$Drugs,
+        col='steelblue',
+        main='Cost by Drugs',
+        xlab='Drugs',
+        ylab='Cost') 
+
+boxplot(df$Cost ~ df$Complications,
+        col='steelblue',
+        main='Cost by Complications',
+        xlab='Complications',
+        ylab='Cost')
+```
+
+## Question 10
+
+Your next job: show scatter plots of `Cost` ($y$-axis) versus all the remaining predictor variables. Again, try to visually infer associations...will we eventually be able to learn a model that predicts `Cost`? (And again, there is no need to write anything down.)
+```{r}
+
+a <- df %>% select(Age, Cost)
+p1 <- ggplot(data = a, mapping=aes(y=Age, x = Cost)) +
+  geom_point() +
+  ggtitle("Age")
+
+b <- df %>% select(Interventions, Cost)
+p2 <- ggplot(data = b, mapping=aes(y=Interventions, x = Cost)) +
+   geom_point() +
+  ggtitle("Interventions")
+
+c <- df %>% select(ERVisit, Cost)
+p3 <- ggplot(data = c, mapping=aes(y=ERVisit, x = Cost)) +
+  geom_point() +
+  ggtitle("ERVisit")
+
+d <- df %>% select(Comorbidities, Cost)
+p4 <- ggplot(data = d, mapping=aes(y=Comorbidities, x = Cost)) +
+  geom_point() +
+  ggtitle("Comorbidities")
+
+e <- df %>% select(Duration, Cost)
+p5 <- ggplot(data = e, mapping=aes(y=Duration, x = Cost)) +
+  geom_point() +
+  ggtitle("Duration")
+
+ggarrange(p1, p2, p3, p4, p5, ncol = 2, nrow = 3)
+```
+
+## Question 11
+
+And your next job: visually determine the level of correlation (i.e., level of linear dependence) between all the predictor variables. (Hint: `corrplot`.) Include all the variables, both quantitative and categorical. In a sense, this plot replaces the need to generate all pairwise scatter plots (of which there would be, I believe, 36 for eight predictor variables). Why might apparent associations between variables be bad, if you see any? We'll talk about this at length in a later lecture, but in short it would be evidence of *multicollinearity*, which can affect your ability to interpret any models that you learn (particularly linear regression models).
+
+Before you start, there's a wrinkle here: `cor()` does not accept factor variables. So, remove them.
+```{r}
+library(corrplot)
+
+df %>% 
+  dplyr::select(., Age, Interventions, ERVisit, Comorbidities, Duration) %>% 
+  cor(.) %>% 
+  corrplot(.,method="ellipse")
+```
+
+## Question 12
+
+Your last job: create a `ggpairs()` plot for all the predictor variables. (Filter out `Cost`! Note that here, there is no need to convert the factor variables to numeric type.) Note that in the output pane, there are three buttons to the upper right: a filled square, two carets, and an x. Click on the filled square to create a new window with your plot, which you can then resize to make larger and easier to see. Note that just about all the information you could ever want is on this plot, but it lends itself to a certain amount of cognitive overload, to put it lightly.
+```{r}
+library(GGally)
+df %>% filter(.,Cost>0) -> d
+ggpairs(d, progress = F)
+```
+

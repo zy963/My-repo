@@ -1,0 +1,116 @@
+---
+title: "Lab_06R"
+author: "36-600"
+date: "Fall 2022"
+output: 
+  html_document:
+    toc: no
+    toc_float: no
+    theme: spacelab
+---
+
+To answer the questions below, it will help you to refer to the class notes and to Chapter 3 of ISLR (and especially Section 6).
+
+## Data
+
+We'll begin by importing the heart-disease dataset and log-transforming the response variable, `Cost`:
+```{r}
+df <- read.csv("http://www.stat.cmu.edu/~pfreeman/heart_disease.csv",stringsAsFactors=TRUE)
+df <- df[,-10]
+w <- which(df$Cost > 0)
+df <- df[w,]
+df$Cost <- log(df$Cost)
+summary(df)
+```
+
+## Question 1
+
+Split the data into training and test sets. Call these `df.train` and `df.test`. Assume that 70% of the data will be used to train the linear regression model. Recall that
+```
+s <- sample(nrow(df),round(0.7*nrow(df)))
+```
+will randomly select the rows for training. Also recall that
+```
+df[s,] and df[-s,]
+```
+are ways of filtering the data frame into the training set and the test set, respectively. (Remember to set the random number seed!)
+```{r}
+set.seed(400)
+s <- sample(nrow(df),round(0.7*nrow(df)))
+df.train <- df[s,]
+df.test <- df[-s,]
+```
+
+---
+
+Before moving on to performing linear regression, you should learn a bit about model syntax. Here we show this syntax within the context of a simple analysis:
+```
+> lm.out <- lm(Cost~.,data=df.train)
+> summary(lm.out)
+> Cost.pred <- predict(lm.out,newdata=df.test)
+```
+
+Let's break this down. 
+
+First, we call `lm()`, which stands for "linear model." For our model, we decide to regress the variable `Cost` onto all the predictor variables (represented by the "."). (Note: that's a tilde before the period, not a minus sign! See below for what we would do if we don't want to include all the predictor variables when learning the model.) `R` doesn't know where these predictor variable are, so we specify that via the `data=` argument. We save the output as `lm.out`.
+
+Second, we call the `summary()` function. `summary()` is a general function whose behavior depends on the class of object passed to it. If the object is a data frame, you get a numerical summary. (Try it with `df.train`!) If the object is of class `lm`, then you get entirely different output. (Basically, you can think of it as `summary()` checking for the class, then calling another function depending on what the class is. Here, `summary()` invisibly redirects `lm.out` to `summary.lm()`.) The `summary()` function provides the $p$-values for the individual coefficients and for the $F$ statistic, plus the adjusted $R^2$, etc.
+
+Third, we use the model embedded within `lm.out` to generate predictions for the mass for new data (the test data). `predict()` behaves like `summary()`; here, it redirects the arguments to `predict.lm()`.
+
+Now, about the model syntax. For simplicity, assume that we have a data frame `p`, with columns `a`, `b`, and `c`, and `r` (the response variable).
+
+- To include `a` only: `lm(r~a,data=p)`
+- To include `a` and `c` only: `lm(r~a+c,data=p)` or `lm(r~.-b,data=p)`
+- To regress through the origin: `lm(r~.-1,data=p)`
+- To include `a`, `b`, and their interaction: `lm(r~a+b+a:b,data=p)`
+
+There's more, but life is short and so's this course!
+
+---
+
+## Question 2
+
+Perform a multiple linear regression analysis. Use the `summary()` function to examine the output. Do you conclude that the linear model is informative or uninformative?
+```{r}
+lm.out <- lm(Cost~.,data=df.train)
+summary(lm.out)
+```
+```
+the model is informative, since the R^2 is not too low neiher too high.
+```
+
+## Question 3
+
+Create a diagnostic plot showing the predicted cost ($y$-axis) versus the observed cost ($x$-axis). As in the example in the notes, make the limits the same along both axes (use `xlim()` and `ylim()`) and draw a diagonal line from lower-left to upper-right (look up `geom_abline()`). 
+Where does the linear model tend to break down the most?
+```{r}
+Cost.pred <- predict(lm.out,newdata=df.test)
+
+plot(df.test$Cost, Cost.pred, type = "p", xlim = c(1, 13), ylim = c(1, 13), xlab = 'Obs', ylab = 'Pred')
+abline(a = 0, b = 1)
+```
+```
+the model tend to break down when the observation is relatively high
+```
+
+## Question 4
+
+Load the `car` library (install it if necessary!) and use the `vif()` function to check for possible multicollinearity. Does there appear to be issues with multicollinearity with these data? There is no need to mitigate it if you see it. (Hint: see page 9 of today's notes.)
+```{r}
+library(car)
+
+lm.out <- lm(Cost~.,data=df.test)
+vif(lm.out)
+```
+```
+No issue
+```
+
+## Question 5
+
+Compute the mean-squared error for the linear model. (Remember: MSEs are computed on the test-set data only.) Note that the square root of this quantity is the average distance between the predicted cost and the observed cost. We may come back to these data later and see if a machine-learning model does a better job than linear regression in predicting cost. (Hint: see page 11 of today's notes.)
+```{r}
+mean((df.test$Cost-predict(lm.out))^2)
+```
+

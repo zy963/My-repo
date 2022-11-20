@@ -1,0 +1,140 @@
+---
+title: "P2"
+output: html_document
+date: "2022-10-29"
+---
+## Describe the data
+Load the data
+```{r}
+df <- read.csv('diamonds.csv', header = TRUE)
+
+df <- df[, -1]
+y = df$price
+df = df[,-7]  # get rid of price
+names(df)[7:9] = c("xx","yy","zz") # rename (x,y,z)
+df = cbind(df,y) # tack price back on, as a column named y
+
+head(df, 10)
+```
+describe the data (summary and sample size). Before the summary, factorize 'cut', 'color', and 'clarity'. And apparently 'X' is the serial number for each row, which is redundant, so we will delete that.
+```{r}
+df$cut <- factor(df$cut)
+df$color <- factor(df$color)
+df$clarity <- factor(df$clarity)
+
+summary(df)
+nrow(df)
+```
+## Concise EDA
+First I tried to use the boxplot to identify variables that are highly skew. For this part, I used two different approaches for numerical and factorized variables.
+```{r}
+suppressMessages(library(tidyverse))
+
+n <- gather(df %>% select(.,depth, table, y, xx, yy, zz), key = 'character', value = 'number')
+ggplot(data = n, mapping=aes(x = number)) + 
+  geom_histogram() +
+  facet_wrap(~character, scales = 'free')
+```
+```{r}
+suppressMessages(library(ggpubr))
+
+p1 <- ggplot(data = df %>% select(cut), mapping=aes(x=cut)) +
+  geom_bar(fill = "gray") +
+  ggtitle("cut")
+
+p2 <- ggplot(data = df %>% select(color), mapping=aes(x=color)) +
+   geom_bar(fill = "gray") +
+  ggtitle("color")
+
+p3 <- ggplot(data = df %>% select(clarity), mapping=aes(x=clarity)) +
+  geom_bar(fill = "gray") +
+  ggtitle("clarity")
+
+ggarrange(p1, p2, p3, ncol = 3, nrow = 1)
+```
+Now let's take a look at the outliers. 'z' has a large gap between 3rd Qu. and MAX.
+```{r}
+head(df[order(-df$zz),], 10)
+```
+Clearly the sample with 'z' being 31.8 is an outlier and we should delete it.
+```{r}
+df <- filter(df, df$zz < 30)
+nrow(df)
+```
+Do the same with 'y'.
+```{r}
+head(df[order(-df$yy),], 10)
+```
+Clearly the sample with the highest two 'y' are outliers and we should delete them.
+```{r}
+df <- filter(df, df$yy < 30)
+nrow(df)
+```
+Do the same with 'x'.
+```{r}
+head(df[order(-df$xx),], 10)
+```
+```{r}
+head(df[order(df$xx),], 10)
+```
+'x' seems fine and we can now move on and create a correlation plot.
+```{r}
+suppressMessages(library(corrplot))
+
+df %>% 
+  dplyr::select(.,depth, table, y, xx, yy, zz) %>% 
+  cor(.) %>% 
+  corrplot(.,method="ellipse")
+```
+From the correlation plot, it is easy to see that 'x', 'y', and 'z' are highly related to log(price)
+
+## Split the data
+Split the data into train and test (7:3)
+```{r}
+set.seed(505)
+s <- sample(nrow(df),round(0.7*nrow(df)))
+train <- df[s,]
+test <- df[-s,]
+```
+
+## Linear regression analysis
+```{r}
+lm.out <- lm(y~.,data=train)
+summary(lm.out)
+```
+The adjusted R square is 0.9197, which mkaes the model useful.
+
+```{r}
+plot(lm.out)
+```
+```{r}
+resp.pred <- predict(lm.out, newdata=test)
+hist(test$y - resp.pred)
+```
+The histogram of the residuals between the observed test-set response values and the predicted test-set response values looks normal.
+```{r}
+Cost.pred <- predict(lm.out,newdata=test)
+mean((Cost.pred-test$y)^2)
+```
+the MSE is 1279551.
+```{r}
+library(bestglm)
+
+out.bg.bic <- bestglm(train,family=gaussian,IC="BIC")
+out.bg.bic$BestModel
+```
+
+```{r}
+resp.pred.bic <- predict(out.bg.bic$BestModel,newdata=test)
+mean((test$y-resp.pred.bic)^2)
+```
+The MSE is actually higher.
+```{r}
+out.bg.aic <- bestglm(train,family=gaussian,IC="AIC")
+out.bg.aic$BestModel
+```
+```{r}
+resp.pred.aic <- predict(out.bg.aic$BestModel,newdata=test)
+mean((test$y-resp.pred.aic)^2)
+```
+When using 'aic', the model is actually the same and therefore, the MSE is the same.

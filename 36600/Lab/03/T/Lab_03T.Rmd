@@ -1,0 +1,92 @@
+---
+title: "Lab: Data I/O"
+author: "36-600"
+date: "Fall 2022"
+output:
+  html_document:
+    toc: no
+    toc_float: no
+    theme: spacelab
+---
+
+## Question 1
+
+Download `simple.txt` from the Canvas site. It is in the `DATA` directory. Use an external viewer (your choice) to look at the file. Then apply an appropriate function to read the file's contents into `R`. Show the names of the columns. Make sure the names are correct, and that there are eight columns. (Note: you may find that your first choice of function does not provide optimal results. If so, try another function. Note that `read_delim()` with a properly formatted regex might help here. If you use base `R` functionality, consider including the argument `stringsAsFactors=FALSE`.)
+```{r}
+df <- read.table('simple.txt', header = TRUE, stringsAsFactors = F)
+df
+```
+
+## Question 2
+
+Read in the data file from Question 1 but skip the header. Display the names that `R` gives to the columns. For `readr`, you may find sub-optimal results; if so, you would need to specify the column names as an argument. (You need not actually do that here.)
+```{r}
+df <- read.table('simple.txt', header = FALSE, stringsAsFactors = F, skip = 1)
+df
+```
+
+## Question 3
+
+Read in the data file from Question 1 but only read in the first four lines, while retaining the header.
+```{r}
+df <- read.table('simple.txt', header = TRUE, stringsAsFactors = F, nrows = 4)
+df
+```
+
+## Question 4
+
+Download `planets_small.csv` from the Canvas site. It is in the `DATA` directory. Use an external viewer (your choice) to look at the file. Then apply an appropriate function to read the file's contents into `R`. Note that here, you have one column that should be rendered as character strings (`pl_hostname`, the first column), while the rest should be rendered as factor variables. Thus you do not want to use the `stringsAsFactors` argument here, as it is too coarse. You need to explicitly specify the types of each column. (There's an example of how to do this in the notes, with base `R` functionality! Or you can try using the argument `col_types` in `read_csv()`.)
+```{r}
+df <- read.csv('planets_small.csv', header = TRUE, colClasses = c('character', 'factor', 'factor', 'factor'))
+df
+```
+
+## Question 5
+
+Download `students.txt` from the Canvas site. It is in the `DATA` directory. Use an external viewer (your choice) to look at the file. Then apply an appropriate function to read the file's contents into `R`. Use an appropriate argument that ensures that each non-numerical column is treated as a vector of strings, and not a factor variable. (You may have done this back up in Question 1.) Show that you've done this by displaying the type of the variable the column `Last Name`. (Use `typeof()`.)
+```{r}
+df <- read.table('students.txt', header = TRUE, stringsAsFactors = F)
+typeof('Last.Name')
+```
+
+## Question 6
+
+Download `emline.csv` from the Canvas site. It is in the `DATA` directory. Use an external viewer (your choice) to look at the file. Then apply an appropriate function to read the file's contents into `R`. When you are done, show the mean and median values of the `sfr` column. Hint: if they are wildly different, you may need to adjust how you read in the data. Hint: look for numbers that represent missing data, and use an appropriate argument to tell `R` that those numbers should be converted to `NA`.
+```{r}
+df <- read.csv("emline.csv", header = TRUE, na.strings="-9999")
+mean(df$sfr, na.rm = T)
+median(df$sfr, na.rm = T)
+```
+
+## Question 7
+
+Download `students.csv` from the Canvas site. It is in the `DATA` directory. Use an external viewer (your choice) to look at the file. Then apply an appropriate function to read the file's contents into `R`. Apply appropriate arguments or other function calls after the fact to ensure that the first three columns of the final data frame (or tibble) are character vectors, and the fourth column is a factor variable. (Simply print out the data frame or tibble; the variable type will be shown.) (Hint: if you use a `readr` function, then the argument `col_types` can be a single string with one letter for each column: "c" for a character vector, "d" for double, "i" for integer, "f" for factor, etc.). Hint: if using base `R`, it is simplest to start with `stringsAsFactors=FALSE` and then convert one column to a factor variable.
+```{r}
+df <- read.csv('students.csv', header = TRUE, colClasses = c('character', 'character', 'character', 'factor'), skip = 6)
+df
+```
+
+## Question 8
+
+Download `bolts.xls` from the Canvas site. It is in the `DATA` directory. If you cannot view the file with `Excel`, there are 100 rows and two columns: `Hour` and `Length`. Read the file into `R`, compute for average `Length` for each value of `Hour`, then plot that average versus `Hour`. (Remember: the variable before the "versus" is the $y$ variable.) Note that if you pass a two-column data frame to `plot()`, it will know what to do. Hint: perhaps `group_by()` and `summarize()` here.
+```{r}
+library('dplyr')
+library('readxl')
+df <- read_excel('bolts.xls')
+by_hour <- df %>% group_by(Hour)
+plot(summarise(by_hour, mean(Length)), typ = 'l', col="red")
+```
+
+## Question 9
+
+Download `data.xlsx` from the Canvas site. It is in the `DATA` directory. Also in the `DATA` directory is `data.png`; download and open it. It is a screen shot of a portion of the data that indicates possibly problematic data. Read the file into `R` while properly dealing with these problematic data. Note that data actually exists in the field(s) marked "#########"; you need not actually do anything about that marker. Display just the four columns in which problematic data existed in the screen shot (use `select()`); those data should be replaced with `NA`.
+```{r}
+library('readxl')
+df <- read_excel('data.xlsx')
+library(readr)
+write_excel_csv(df, 'temp1.csv')
+df <- read.csv("temp1.csv", header = TRUE, na.strings="999", stringsAsFactors = T)
+# df[select(is.na(df))]
+select(df, Sex, RaceEthnicity, ADHD, Presentation)
+```
+

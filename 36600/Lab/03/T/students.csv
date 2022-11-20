@@ -1,0 +1,12 @@
+# Students in 36-350
+#
+# Column 1: Last Name
+# Column 2: First Name
+# Column 3: Andrew ID
+# Column 4: Vegetarian
+
+Last Name,First Name,Andrew ID,Vegetarian
+
+Baggins,Bilbo,bilbobag,N
+Bar,Foo,fbar1,Y
+Umlaut,Dieter,dumlaut,N
